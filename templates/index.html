@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Pantry AI</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://jsdelivr.net"></script>
+    <!-- Html5-Qrcode library for camera barcode scanning -->
+    <script src="https://unpkg.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans p-4">
+    <div class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6 space-y-6">
+        <h1 class="text-2xl font-bold text-center text-green-600">🍞 AI Smart Pantry</h1>
+        
+        <!-- Camera Scanner Element -->
+        <div class="bg-gray-50 p-4 rounded-lg border border-dashed border-gray-300">
+            <h2 class="text-lg font-semibold mb-2">📸 Live Camera Scanner</h2>
+            <div id="reader" style="width: 100%"></div>
+            <div id="scan-result" class="mt-2 text-center font-medium text-sm text-gray-600">Camera ready...</div>
+        </div>
+
+        <!-- Manual Backup Input -->
+        <div class="flex space-x-2">
+            <input id="manual-input" type="text" placeholder="Type item name manually..." class="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+            <button onclick="addManualItem()" class="bg-green-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-600">Add</button>
+        </div>
+
+        <!-- Current Pantry Section -->
+        <div>
+            <h2 class="text-lg font-semibold mb-2">📋 My Current Pantry</h2>
+            <ul id="pantry-list" class="divide-y divide-gray-200 bg-gray-50 rounded-lg p-2 max-h-48 overflow-y-auto"></ul>
+        </div>
+
+        <!-- AI Chef Action Button -->
+        <div class="pt-2">
+            <button onclick="generateRecipes()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 transition">✨ Ask AI Chef for Recipes</button>
+            <div id="ai-recipes" class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg hidden text-sm whitespace-pre-line text-gray-700"></div>
+        </div>
+    </div>
+
+    <script>
+        // Start live camera barcode scanner
+        function onScanSuccess(decodedText, decodedResult) {
+            document.getElementById('scan-result').innerText = "Scanning barcode: " + decodedText;
+            fetch('/api/scan', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ barcode: decodedText })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.item_name) {
+                    document.getElementById('scan-result').innerText = "✅ Added: " + data.item_name;
+                    loadPantry();
+                } else {
+                    document.getElementById('scan-result').innerText = "❌ Product unknown.";
+                }
+            })
+            .catch(err => {
+                document.getElementById('scan-result').innerText = "❌ Error reading barcode.";
+            });
+        }
+
+        // Initialize the browser scanner UI elements
+        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        html5QrcodeScanner.render(onScanSuccess);
+
+        // Fetch pantry inventory list from the Flask backend
+        function loadPantry() {
+            fetch('/api/pantry')
+            .then(res => res.json())
+            .then(items => {
+                const list = document.getElementById('pantry-list');
+                list.innerHTML = items.length === 0 ? '<li class="p-2 text-gray-400 text-sm text-center">No items logged yet</li>' : '';
+                items.forEach(item => {
+                    list.innerHTML += `<li class="flex justify-between items-center py-2 px-1 text-sm font-medium">
+                        <span>${item.item_name}</span>
+                        <button onclick="deleteItem(${item.id})" class="text-red-500 hover:text-red-700 font-bold">✕</button>
+                    </li>`;
+                });
+            });
+        }
+
+        // Manual text item entry function
+        function addManualItem() {
+            const input = document.getElementById('manual-input');
+            if(!input.value) return;
+            fetch('/api/pantry', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ item_name: input.value })
+            }).then(() => { input.value = ''; loadPantry(); });
+        }
+
+        // Remove item from database list function
+        function deleteItem(id) {
+            fetch('/api/pantry', {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ id: id })
+            }).then(() => loadPantry());
+        }
+
+        // Request mock AI response based on item names string loop
+        function generateRecipes() {
+            const output = document.getElementById('ai-recipes');
+            output.classList.remove('hidden');
+            output.innerText = "AI Chef is thinking...";
+            fetch('/api/generate-recipes', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => { output.innerText = data.recipes; });
+        }
+
+        // Automatically load item data when user opens page
+        loadPantry();
+    </script>
+</body>
+</html>
