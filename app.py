@@ -161,7 +161,7 @@ def generate_recipe():
             prompt = f"Create a short, creative cooking recipe using some of these pantry ingredients: {', '.join(item_names)}. Return the output with a clear title, prep time, difficulty level, and short description."
             
             completion = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",  # Updated to current Groq model
+                model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=300
