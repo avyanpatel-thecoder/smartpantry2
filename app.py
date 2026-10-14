@@ -38,7 +38,7 @@ class Recipe(db.Model):
     difficulty = db.Column(db.String(50), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-# Initialize tables globally for Gunicorn cloud boot
+# Initialize tables globally for cloud / Gunicorn boot
 with app.app_context():
     db.create_all()
     if not User.query.filter_by(username='demo@smartpantry.com').first():
@@ -161,7 +161,7 @@ def generate_recipe():
             prompt = f"Create a short, creative cooking recipe using some of these pantry ingredients: {', '.join(item_names)}. Return the output with a clear title, prep time, difficulty level, and short description."
             
             completion = client.chat.completions.create(
-                model="llama3-70b-8192",
+                model="llama-3.3-70b-versatile",  # Updated to current Groq model
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
                 max_tokens=300
