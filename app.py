@@ -38,6 +38,15 @@ class Recipe(db.Model):
     difficulty = db.Column(db.String(50), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
+# Initialize tables globally so Gunicorn creates them on cloud boot
+with app.app_context():
+    db.create_all()
+    if not User.query.filter_by(username='demo@smartpantry.com').first():
+        hashed_pw = generate_password_hash('password123', method='pbkdf2:sha256')
+        demo_user = User(username='demo@smartpantry.com', password=hashed_pw)
+        db.session.add(demo_user)
+        db.session.commit()
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -212,11 +221,4 @@ def scan_barcode():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        if not User.query.filter_by(username='demo@smartpantry.com').first():
-            hashed_pw = generate_password_hash('password123', method='pbkdf2:sha256')
-            demo_user = User(username='demo@smartpantry.com', password=hashed_pw)
-            db.session.add(demo_user)
-            db.session.commit()
     app.run(debug=True, port=5000)
