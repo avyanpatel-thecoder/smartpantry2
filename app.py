@@ -38,8 +38,7 @@ class Recipe(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
 @login_manager.user_loader
-d
-ef load_user(user_id):
+def load_user(user_id):
     return User.query.get(int(user_id))
 
 # --- Application Routes ---
@@ -119,7 +118,6 @@ def get_recipes():
 @app.route('/api/recipes/generate', methods=['POST'])
 @login_required
 def generate_recipe():
-    # Dynamic AI recipe creation from pantry stock
     items = PantryItem.query.filter_by(user_id=current_user.id).all()
     item_names = [i.name for i in items] if items else ["Pantry Staples"]
     
@@ -162,7 +160,6 @@ def scan_barcode():
                 if categories_list:
                     category = categories_list[0].replace('en:', '').capitalize()
                     
-        # Save automatically to user pantry
         new_item = PantryItem(
             name=product_name,
             quantity="1 unit",
@@ -185,7 +182,6 @@ def scan_barcode():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        # Create default test user if none exists
         if not User.query.filter_by(username='demo@smartpantry.com').first():
             hashed_pw = generate_password_hash('password123', method='pbkdf2:sha256')
             demo_user = User(username='demo@smartpantry.com', password=hashed_pw)
