@@ -11,3 +11,4 @@ click==8.5.0
 itsdangerous==2.2.0
 packaging==26.3
 urllib3==2.8.0
+groq==0.4.2
