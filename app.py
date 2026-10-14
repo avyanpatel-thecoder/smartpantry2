@@ -4,6 +4,7 @@ from flask import Flask, render_template, redirect, url_for, request, jsonify, f
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from groq import Groq
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'smart-pantry-secret-key-2026')
@@ -121,10 +122,41 @@ def generate_recipe():
     items = PantryItem.query.filter_by(user_id=current_user.id).all()
     item_names = [i.name for i in items] if items else ["Pantry Staples"]
     
-    recipe_title = f"Fresh {item_names[0]} & Herb Skillet"
+    groq_api_key = os.environ.get("GROQ_API_KEY")
+    
+    if groq_api_key:
+        try:
+            client = Groq(api_key=groq_api_key)
+            prompt = f"Create a short, creative cooking recipe using some of these pantry ingredients: {', '.join(item_names)}. Return the output with a clear title, prep time, difficulty level, and short description."
+            
+            completion = client.chat.completions.create(
+                model="llama3-70b-8192",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=300
+            )
+            recipe_text = completion.choices[0].message.content
+            lines = [line.strip() for line in recipe_text.split('\n') if line.strip()]
+            recipe_title = lines[0] if lines else "AI Chef Special"
+            
+            new_recipe = Recipe(
+                title=recipe_title[:100],
+                description=recipe_text,
+                time="20 mins",
+                difficulty="Easy",
+                user_id=current_user.id
+            )
+            db.session.add(new_recipe)
+            db.session.commit()
+            return jsonify({'success': True, 'title': recipe_title})
+        except Exception as e:
+            print(f"Groq API error: {e}")
+
+    # Fallback recipe if key is missing or call fails
+    recipe_title = f"Fresh {item_names[0]} Skillet"
     new_recipe = Recipe(
         title=recipe_title,
-        description=f"A delicious meal whipped up using your available stock including {', '.join(item_names[:3])}.",
+        description=f"A delicious meal whipped up using available ingredients: {', '.join(item_names[:3])}.",
         time="25 mins",
         difficulty="Easy",
         user_id=current_user.id
