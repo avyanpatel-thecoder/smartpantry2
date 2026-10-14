@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Pantry - Sign In / Register</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-body">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <i class="fa-solid fa-seedling"></i>
+      <h2>SmartPantry</h2>
+    </div>
+    <form method="POST" action="">
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" class="form-control" name="username" required placeholder="name@example.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" class="form-control" name="password" required placeholder="Enter your password">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">Sign In</button>
+    </form>
+  </div>
+</body>
+</html>
