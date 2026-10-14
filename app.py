@@ -38,7 +38,7 @@ class Recipe(db.Model):
     difficulty = db.Column(db.String(50), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-# Initialize tables globally so Gunicorn creates them on cloud boot
+# Initialize tables globally for Gunicorn cloud boot
 with app.app_context():
     db.create_all()
     if not User.query.filter_by(username='demo@smartpantry.com').first():
@@ -51,7 +51,7 @@ with app.app_context():
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# --- Application Routes ---
+# --- Application & Auth Routes ---
 @app.route('/')
 @login_required
 def index():
@@ -69,6 +69,28 @@ def login():
             return redirect(url_for('index'))
         flash('Invalid username or password', 'error')
     return render_template('auth.html')
+
+@app.route('/register', methods=['POST'])
+def register():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    
+    if not username or not password:
+        flash('Username and password are required', 'error')
+        return redirect(url_for('login'))
+        
+    existing_user = User.query.filter_by(username=username).first()
+    if existing_user:
+        flash('Username already exists. Please login.', 'error')
+        return redirect(url_for('login'))
+        
+    hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
+    new_user = User(username=username, password=hashed_pw)
+    db.session.add(new_user)
+    db.session.commit()
+    
+    login_user(new_user)
+    return redirect(url_for('index'))
 
 @app.route('/logout')
 @login_required
@@ -174,7 +196,7 @@ def generate_recipe():
     db.session.commit()
     return jsonify({'success': True, 'title': recipe_title})
 
-# --- Barcode Scanner API (Open Food Facts Integration) ---
+# --- Barcode Scanner API ---
 @app.route('/api/scan', methods=['POST'])
 @login_required
 def scan_barcode():
