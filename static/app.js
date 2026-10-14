@@ -1,3 +1,5 @@
+let mediaStream = null;
+
 document.addEventListener('DOMContentLoaded', () => {
   initNavigation();
   loadPantryData();
@@ -35,12 +37,44 @@ function switchView(viewId) {
   if (target) target.classList.add('active');
 }
 
-function openModal(modalId) {
+async function openModal(modalId) {
   document.getElementById(modalId).classList.add('active');
+  if (modalId === 'scan-modal') {
+    await startCamera();
+  }
 }
 
 function closeModal(modalId) {
   document.getElementById(modalId).classList.remove('active');
+  if (modalId === 'scan-modal') {
+    stopCamera();
+  }
+}
+
+async function startCamera() {
+  const videoElement = document.getElementById('scanner-video');
+  if (!videoElement) return;
+  
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }
+    });
+    videoElement.srcObject = mediaStream;
+  } catch (err) {
+    console.warn('Camera access not available or denied:', err);
+    showToast('Camera access unavailable. Use manual entry below.', 'error');
+  }
+}
+
+function stopCamera() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop());
+    mediaStream = null;
+  }
+  const videoElement = document.getElementById('scanner-video');
+  if (videoElement) {
+    videoElement.srcObject = null;
+  }
 }
 
 function showToast(message, type = 'success') {
@@ -61,7 +95,6 @@ async function loadPantryData() {
     
     document.getElementById('stat-total-items').textContent = items.length;
     
-    // Calculate expiring soon (within 3 days)
     const now = new Date();
     const expiringCount = items.filter(item => {
       const expiry = new Date(item.expiry_date);
@@ -183,7 +216,7 @@ async function generateAIRecipe() {
 async function submitBarcode() {
   const barcode = document.getElementById('barcode-input').value;
   if (!barcode) {
-    showToast('Please enter a barcode', 'error');
+    showToast('Please enter or scan a barcode', 'error');
     return;
   }
   try {
