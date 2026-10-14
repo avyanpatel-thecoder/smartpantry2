@@ -1,119 +1,279 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Pantry AI</title>
-    <!-- Tailwind CSS for styling -->
-    <script src="https://jsdelivr.net"></script>
-    <!-- Html5-Qrcode library for camera barcode scanning -->
-    <script src="https://unpkg.com"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Pantry - Food Management SaaS</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body class="bg-gray-100 min-h-screen font-sans p-4">
-    <div class="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6 space-y-6">
-        <h1 class="text-2xl font-bold text-center text-green-600">🍞 AI Smart Pantry</h1>
-        
-        <!-- Camera Scanner Element -->
-        <div class="bg-gray-50 p-4 rounded-lg border border-dashed border-gray-300">
-            <h2 class="text-lg font-semibold mb-2">📸 Live Camera Scanner</h2>
-            <div id="reader" style="width: 100%"></div>
-            <div id="scan-result" class="mt-2 text-center font-medium text-sm text-gray-600">Camera ready...</div>
+<body>
+
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <i class="fa-solid fa-seedling"></i>
+        <h1>SmartPantry</h1>
+      </div>
+      <ul class="sidebar-menu">
+        <li class="active"><a href="#" data-target="dashboard-view"><i class="fa-solid fa-chart-pie"></i> Dashboard</a></li>
+        <li><a href="#" data-target="pantry-view"><i class="fa-solid fa-basket-shopping"></i> Pantry Inventory</a></li>
+        <li><a href="#" data-target="recipes-view"><i class="fa-solid fa-utensils"></i> AI Recipes</a></li>
+        <li><a href="#" data-target="waste-view"><i class="fa-solid fa-recycle"></i> Waste Reduction</a></li>
+      </ul>
+      <div class="sidebar-footer">
+        <div class="user-profile-card">
+          <div class="user-info">
+            <div class="user-avatar" id="user-initials">U</div>
+            <div class="user-details">
+              <h4 id="user-display-name">My Account</h4>
+              <span>Active Plan</span>
+            </div>
+          </div>
+          <a href="/logout" class="logout-btn" title="Sign Out"><i class="fa-solid fa-right-from-bracket"></i></a>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Top Navbar -->
+      <header class="top-navbar">
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <button class="mobile-menu-toggle" id="menu-toggle"><i class="fa-solid fa-bars"></i></button>
+          <div class="search-bar-container">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="global-search" placeholder="Search items, recipes...">
+          </div>
+        </div>
+        <div class="top-nav-actions">
+          <button class="btn btn-outline" onclick="openModal('scan-modal')"><i class="fa-solid fa-barcode"></i> Scan Barcode</button>
+          <button class="btn btn-primary" onclick="openModal('add-item-modal')"><i class="fa-solid fa-plus"></i> Add Item</button>
+        </div>
+      </header>
+
+      <!-- Dashboard View -->
+      <div id="dashboard-view" class="content-view active">
+        <div class="view-header">
+          <div class="view-title">
+            <h2>Dashboard Overview</h2>
+            <p>Monitor your pantry inventory, expiration alerts, and waste metrics.</p>
+          </div>
         </div>
 
-        <!-- Manual Backup Input -->
-        <div class="flex space-x-2">
-            <input id="manual-input" type="text" placeholder="Type item name manually..." class="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
-            <button onclick="addManualItem()" class="bg-green-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-600">Add</button>
+        <!-- Overview Cards -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-info">
+              <span>Total Items</span>
+              <h3 id="stat-total-items">0</h3>
+            </div>
+            <div class="stat-icon green"><i class="fa-solid fa-basket-shopping"></i></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-info">
+              <span>Expiring Soon</span>
+              <h3 id="stat-expiring-items">0</h3>
+            </div>
+            <div class="stat-icon orange"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-info">
+              <span>Saved Recipes</span>
+              <h3 id="stat-recipes-count">0</h3>
+            </div>
+            <div class="stat-icon teal"><i class="fa-solid fa-utensils"></i></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-info">
+              <span>Waste Prevented</span>
+              <h3 id="stat-waste-saved">0 kg</h3>
+            </div>
+            <div class="stat-icon blue"><i class="fa-solid fa-recycle"></i></div>
+          </div>
         </div>
 
-        <!-- Current Pantry Section -->
-        <div>
-            <h2 class="text-lg font-semibold mb-2">📋 My Current Pantry</h2>
-            <ul id="pantry-list" class="divide-y divide-gray-200 bg-gray-50 rounded-lg p-2 max-h-48 overflow-y-auto"></ul>
-        </div>
+        <div class="dashboard-grid">
+          <!-- Recent Pantry Items -->
+          <div class="card">
+            <div class="card-header">
+              <h3>Recent Pantry Additions</h3>
+              <a href="#" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;" onclick="switchView('pantry-view')">View All</a>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Quantity</th>
+                    <th>Category</th>
+                    <th>Freshness</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-pantry-tbody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-        <!-- AI Chef Action Button -->
-        <div class="pt-2">
-            <button onclick="generateRecipes()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold shadow hover:bg-blue-700 transition">✨ Ask AI Chef for Recipes</button>
-            <div id="ai-recipes" class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg hidden text-sm whitespace-pre-line text-gray-700"></div>
+          <!-- Quick AI Recipe Suggestion -->
+          <div class="card">
+            <div class="card-header">
+              <h3>AI Recipe Spotlight</h3>
+              <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="generateAIRecipe()">Generate</button>
+            </div>
+            <div id="spotlight-recipe-content">
+              <div class="empty-state" style="padding: 20px;">
+                <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 32px;"></i>
+                <p style="font-size: 13px;">Click generate to create an instant recipe from your available pantry stock.</p>
+              </div>
+            </div>
+          </div>
         </div>
+      </div>
+
+      <!-- Pantry Inventory View -->
+      <div id="pantry-view" class="content-view">
+        <div class="view-header">
+          <div class="view-title">
+            <h2>Pantry Inventory</h2>
+            <p>Manage your food stock, categories, and expiration dates.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('add-item-modal')"><i class="fa-solid fa-plus"></i> Add Pantry Item</button>
+        </div>
+        <div class="card">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Item Name</th>
+                  <th>Quantity</th>
+                  <th>Category</th>
+                  <th>Expiration Date</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="full-pantry-tbody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Recipes View -->
+      <div id="recipes-view" class="content-view">
+        <div class="view-header">
+          <div class="view-title">
+            <h2>AI Recipe Recommendations</h2>
+            <p>Delicious meals curated by AI using your current pantry ingredients.</p>
+          </div>
+          <button class="btn btn-primary" onclick="generateAIRecipe()"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate New Recipe</button>
+        </div>
+        <div class="recipes-grid" id="recipes-container">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- Waste Reduction View -->
+      <div id="waste-view" class="content-view">
+        <div class="view-header">
+          <div class="view-title">
+            <h2>Food Waste Analytics</h2>
+            <p>Track your environmental impact and money saved by utilizing pantry items efficiently.</p>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-info">
+              <span>Estimated Money Saved</span>
+              <h3 id="analytics-money-saved">$0.00</h3>
+            </div>
+            <div class="stat-icon green"><i class="fa-solid fa-dollar-sign"></i></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-info">
+              <span>Items Consumed on Time</span>
+              <h3 id="analytics-consumed-count">0</h3>
+            </div>
+            <div class="stat-icon teal"><i class="fa-solid fa-circle-check"></i></div>
+          </div>
+        </div>
+      </div>
+
     </div>
+  </div>
 
-    <script>
-        // Start live camera barcode scanner
-        function onScanSuccess(decodedText, decodedResult) {
-            document.getElementById('scan-result').innerText = "Scanning barcode: " + decodedText;
-            fetch('/api/scan', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ barcode: decodedText })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if(data.item_name) {
-                    document.getElementById('scan-result').innerText = "✅ Added: " + data.item_name;
-                    loadPantry();
-                } else {
-                    document.getElementById('scan-result').innerText = "❌ Product unknown.";
-                }
-            })
-            .catch(err => {
-                document.getElementById('scan-result').innerText = "❌ Error reading barcode.";
-            });
-        }
+  <!-- Add Item Modal -->
+  <div class="modal" id="add-item-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Add Pantry Item</h3>
+        <button class="modal-close" onclick="closeModal('add-item-modal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="add-item-form">
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Item Name</label>
+            <input type="text" class="form-control" name="name" required placeholder="e.g. Organic Milk">
+          </div>
+          <div class="form-group">
+            <label>Quantity</label>
+            <input type="text" class="form-control" name="quantity" required placeholder="e.g. 1 Gallon">
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select class="form-control" name="category">
+              <option value="Dairy">Dairy</option>
+              <option value="Produce">Produce</option>
+              <option value="Pantry">Pantry / Dry Goods</option>
+              <option value="Meat">Meat & Poultry</option>
+              <option value="Beverages">Beverages</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Expiration Date</label>
+            <input type="date" class="form-control" name="expiry_date" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" onclick="closeModal('add-item-modal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
-        // Initialize the browser scanner UI elements
-        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-        html5QrcodeScanner.render(onScanSuccess);
+  <!-- Barcode Scan Modal -->
+  <div class="modal" id="scan-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Scan Product Barcode</h3>
+        <button class="modal-close" onclick="closeModal('scan-modal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="text-align: center;">
+        <div style="background: var(--bg-main); border: 2px dashed var(--primary-light); border-radius: var(--radius-md); padding: 40px; margin-bottom: 16px;">
+          <i class="fa-solid fa-camera" style="font-size: 48px; color: var(--primary); margin-bottom: 12px;"></i>
+          <p style="font-size: 14px; color: var(--text-muted);">Position product barcode within camera viewfinder or enter barcode manually.</p>
+        </div>
+        <div class="form-group">
+          <input type="text" class="form-control" id="barcode-input" placeholder="Enter barcode number...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="closeModal('scan-modal')">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitBarcode()">Lookup Item</button>
+      </div>
+    </div>
+  </div>
 
-        // Fetch pantry inventory list from the Flask backend
-        function loadPantry() {
-            fetch('/api/pantry')
-            .then(res => res.json())
-            .then(items => {
-                const list = document.getElementById('pantry-list');
-                list.innerHTML = items.length === 0 ? '<li class="p-2 text-gray-400 text-sm text-center">No items logged yet</li>' : '';
-                items.forEach(item => {
-                    list.innerHTML += `<li class="flex justify-between items-center py-2 px-1 text-sm font-medium">
-                        <span>${item.item_name}</span>
-                        <button onclick="deleteItem(${item.id})" class="text-red-500 hover:text-red-700 font-bold">✕</button>
-                    </li>`;
-                });
-            });
-        }
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
 
-        // Manual text item entry function
-        function addManualItem() {
-            const input = document.getElementById('manual-input');
-            if(!input.value) return;
-            fetch('/api/pantry', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ item_name: input.value })
-            }).then(() => { input.value = ''; loadPantry(); });
-        }
-
-        // Remove item from database list function
-        function deleteItem(id) {
-            fetch('/api/pantry', {
-                method: 'DELETE',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ id: id })
-            }).then(() => loadPantry());
-        }
-
-        // Request mock AI response based on item names string loop
-        function generateRecipes() {
-            const output = document.getElementById('ai-recipes');
-            output.classList.remove('hidden');
-            output.innerText = "AI Chef is thinking...";
-            fetch('/api/generate-recipes', { method: 'POST' })
-            .then(res => res.json())
-            .then(data => { output.innerText = data.recipes; });
-        }
-
-        // Automatically load item data when user opens page
-        loadPantry();
-    </script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
