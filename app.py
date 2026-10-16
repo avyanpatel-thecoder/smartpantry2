@@ -154,12 +154,11 @@ def generate_recipe():
     
     groq_api_key = os.environ.get("GROQ_API_KEY")
     if not groq_api_key:
-        return jsonify({'success': False, 'error': 'GROQ_API_KEY is not configured on the server.'}), 500
+        return jsonify({'success': False, 'error': 'GROQ_API_KEY environment variable is not set.'}), 500
 
     try:
         client = Groq(api_key=groq_api_key)
         
-        # Pure AI prompt with culinary logic to prevent absurd combos (e.g. granola bars in stir-fries)
         prompt = f"""You are an elite, Michelin-star executive chef and culinary innovator. 
 Available Pantry Inventory: {', '.join(item_names)}.
 
@@ -179,7 +178,7 @@ Step-by-Step Instructions:
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.95,  # High temperature for maximum creativity and diverse outputs
+            temperature=0.95,
             max_tokens=600
         )
         
