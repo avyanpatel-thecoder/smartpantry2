@@ -1,279 +1,175 @@
-let mediaStream = null;
-
 document.addEventListener('DOMContentLoaded', () => {
-  initNavigation();
-  loadPantryData();
-  loadRecipeData();
-  setupForms();
+    fetchPantry();
+    fetchRecipes();
 });
 
-function initNavigation() {
-  const menuToggle = document.getElementById('menu-toggle');
-  const sidebar = document.getElementById('sidebar');
-  if (menuToggle) {
-    menuToggle.addEventListener('click', () => {
-      sidebar.classList.toggle('mobile-open');
+async function fetchPantry() {
+    try {
+        const response = await fetch('/api/pantry');
+        const items = await response.json();
+        
+        const fullTbody = document.getElementById('full-pantry-tbody');
+        const recentTbody = document.getElementById('recent-pantry-tbody');
+        const totalItemsEl = document.getElementById('stat-total-items');
+
+        if (totalItemsEl) totalItemsEl.innerText = items.length;
+
+        if (fullTbody) {
+            if (items.length === 0) {
+                fullTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No items in pantry yet. Scan a barcode or add one!</td></tr>`;
+            } else {
+                fullTbody.innerHTML = items.map(item => `
+                    <tr>
+                        <td><strong>${item.name}</strong></td>
+                        <td>${item.quantity}</td>
+                        <td><span class="badge">${item.category}</span></td>
+                        <td>${item.expiry_date}</td>
+                        <td><span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #10B981;">Fresh</span></td>
+                        <td><button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; color: #EF4444; border-color: #EF4444;" onclick="deleteItem(${item.id})"><i class="fa-solid fa-trash"></i></button></td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        if (recentTbody) {
+            recentTbody.innerHTML = items.slice(-5).reverse().map(item => `
+                <tr>
+                    <td><strong>${item.name}</strong></td>
+                    <td>${item.quantity}</td>
+                    <td>${item.category}</td>
+                    <td><span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #10B981;">Fresh</span></td>
+                </tr>
+            `).join('');
+        }
+    } catch (error) {
+        console.error('Failed to fetch pantry:', error);
+    }
+}
+
+async function fetchRecipes() {
+    try {
+        const response = await fetch('/api/recipes');
+        const recipes = await response.json();
+        
+        const recipesCountEl = document.getElementById('stat-recipes-count');
+        if (recipesCountEl) recipesCountEl.innerText = recipes.length;
+
+        const container = document.getElementById('recipes-container');
+        if (container) {
+            if (recipes.length === 0) {
+                container.innerHTML = `<p style="color: var(--text-muted);">No AI recipes generated yet. Click generate above!</p>`;
+            } else {
+                container.innerHTML = recipes.map(r => `
+                    <div class="card" style="padding: 20px; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <h3 style="margin-bottom: 8px; font-size: 18px; color: var(--text-main);">${r.title}</h3>
+                            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;"><i class="fa-regular fa-clock"></i> ${r.time || '20 mins'} &nbsp;|&nbsp; <i class="fa-solid fa-signal"></i> ${r.difficulty || 'Easy'}</p>
+                            <div style="font-size: 14px; white-space: pre-line; line-height: 1.5; color: var(--text-main); background: var(--bg-body); padding: 12px; border-radius: 8px;">${r.description}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+    } catch (error) {
+        console.error('Failed to fetch recipes:', error);
+    }
+}
+
+// Add item form submission
+const addItemForm = document.getElementById('add-item-form');
+if (addItemForm) {
+    addItemForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(addItemForm);
+        const data = {
+            name: formData.get('name'),
+            quantity: formData.get('quantity'),
+            category: formData.get('category'),
+            expiry_date: formData.get('expiry_date')
+        };
+
+        try {
+            const response = await fetch('/api/pantry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (response.ok) {
+                closeModal('add-item-modal');
+                addItemForm.reset();
+                fetchPantry();
+            }
+        } catch (err) {
+            console.error('Error adding item:', err);
+        }
     });
-  }
-
-  const navLinks = document.querySelectorAll('.sidebar-menu a');
-  navLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      const targetId = link.getAttribute('data-target');
-      switchView(targetId);
-      navLinks.forEach(l => l.parentElement.classList.remove('active'));
-      link.parentElement.classList.add('active');
-      sidebar.classList.remove('mobile-open');
-    });
-  });
 }
 
-function switchView(viewId) {
-  document.querySelectorAll('.content-view').forEach(view => {
-    view.classList.remove('active');
-  });
-  const target = document.getElementById(viewId);
-  if (target) target.classList.add('active');
-}
-
-async function openModal(modalId) {
-  document.getElementById(modalId).classList.add('active');
-  if (modalId === 'scan-modal') {
-    await startCamera();
-  }
-}
-
-function closeModal(modalId) {
-  document.getElementById(modalId).classList.remove('active');
-  if (modalId === 'scan-modal') {
-    stopCamera();
-  }
-}
-
-async function startCamera() {
-  const videoElement = document.getElementById('scanner-video');
-  if (!videoElement) return;
-  
-  try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }
-    });
-    videoElement.srcObject = mediaStream;
-  } catch (err) {
-    console.warn('Camera access not available or denied:', err);
-    showToast('Camera access unavailable. Use manual entry below.', 'error');
-  }
-}
-
-function stopCamera() {
-  if (mediaStream) {
-    mediaStream.getTracks().forEach(track => track.stop());
-    mediaStream = null;
-  }
-  const videoElement = document.getElementById('scanner-video');
-  if (videoElement) {
-    videoElement.srcObject = null;
-  }
-}
-
-function showToast(message, type = 'success') {
-  const container = document.getElementById('toast-container');
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-triangle-exclamation'}"></i> ${message}`;
-  container.appendChild(toast);
-  setTimeout(() => toast.remove(), 3500);
-}
-
-// Data Loaders & API Integrations
-async function loadPantryData() {
-  try {
-    const response = await fetch('/api/pantry');
-    if (!response.ok) return;
-    const items = await response.json();
-    
-    document.getElementById('stat-total-items').textContent = items.length;
-    
-    const now = new Date();
-    const expiringCount = items.filter(item => {
-      const expiry = new Date(item.expiry_date);
-      const diffTime = expiry - now;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays <= 3;
-    }).length;
-    
-    document.getElementById('stat-expiring-items').textContent = expiringCount;
-    document.getElementById('stat-waste-saved').textContent = (items.length * 0.4).toFixed(1) + ' kg';
-
-    renderPantryTables(items);
-  } catch (err) {
-    console.error('Error loading pantry:', err);
-  }
-}
-
-function renderPantryTables(items) {
-  const recentTbody = document.getElementById('recent-pantry-tbody');
-  const fullTbody = document.getElementById('full-pantry-tbody');
-  
-  if (!items || items.length === 0) {
-    const emptyHTML = `<tr><td colspan="6"><div class="empty-state"><i class="fa-solid fa-basket-shopping"></i><h4>No items in pantry</h4><p>Add food items to start tracking freshness.</p></div></td></tr>`;
-    if (recentTbody) recentTbody.innerHTML = emptyHTML;
-    if (fullTbody) fullTbody.innerHTML = emptyHTML;
-    return;
-  }
-
-  const getBadge = (dateStr) => {
-    const expiry = new Date(dateStr);
-    const diffDays = Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24));
-    if (diffDays < 0) return '<span class="badge badge-expired"><i class="fa-solid fa-circle-xmark"></i> Expired</span>';
-    if (diffDays <= 3) return `<span class="badge badge-warning"><i class="fa-solid fa-triangle-exclamation"></i> ${diffDays}d left</span>`;
-    return '<span class="badge badge-fresh"><i class="fa-solid fa-circle-check"></i> Fresh</span>';
-  };
-
-  if (recentTbody) {
-    recentTbody.innerHTML = items.slice(0, 5).map(item => `
-      <tr>
-        <td>
-          <div class="item-cell">
-            <div class="item-icon-box"><i class="fa-solid fa-utensils"></i></div>
-            <strong>${item.name}</strong>
-          </div>
-        </td>
-        <td>${item.quantity}</td>
-        <td>${item.category || 'General'}</td>
-        <td>${getBadge(item.expiry_date)}</td>
-      </tr>
-    `).join('');
-  }
-
-  if (fullTbody) {
-    fullTbody.innerHTML = items.map(item => `
-      <tr>
-        <td><strong>${item.name}</strong></td>
-        <td>${item.quantity}</td>
-        <td>${item.category || 'General'}</td>
-        <td>${item.expiry_date}</td>
-        <td>${getBadge(item.expiry_date)}</td>
-        <td>
-          <button class="btn btn-outline" style="padding: 4px 8px; font-size: 12px;" onclick="deletePantryItem('${item.id || item._id}')"><i class="fa-solid fa-trash"></i></button>
-        </td>
-      </tr>
-    `).join('');
-  }
-}
-
-async function loadRecipeData() {
-  try {
-    const response = await fetch('/api/recipes');
-    if (!response.ok) return;
-    const recipes = await response.json();
-    document.getElementById('stat-recipes-count').textContent = recipes.length;
-    renderRecipes(recipes);
-  } catch (err) {
-    console.error('Error loading recipes:', err);
-  }
-}
-
-function renderRecipes(recipes) {
-  const container = document.getElementById('recipes-container');
-  if (!container) return;
-
-  if (!recipes || recipes.length === 0) {
-    container.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1;"><i class="fa-solid fa-utensils"></i><h4>No recipes generated yet</h4><p>Click generate above to get AI recommendations.</p></div>`;
-    return;
-  }
-
-  container.innerHTML = recipes.map(recipe => `
-    <div class="recipe-card">
-      <div class="recipe-header-img"><i class="fa-solid fa-bowl-food"></i></div>
-      <div class="recipe-body">
-        <div class="recipe-meta">
-          <span><i class="fa-regular fa-clock"></i> ${recipe.time || '20 mins'}</span>
-          <span><i class="fa-solid fa-signal"></i> ${recipe.difficulty || 'Easy'}</span>
-        </div>
-        <h4>${recipe.title}</h4>
-        <p>${recipe.description || 'Made with your available pantry ingredients.'}</p>
-        <button class="btn btn-outline" style="width: 100%;" onclick="showToast('Recipe selected!')">View Instructions</button>
-      </div>
-    </div>
-  `).join('');
+async function deleteItem(id) {
+    if (!confirm('Are you sure you want to remove this item?')) return;
+    try {
+        const response = await fetch(`/api/pantry/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+            fetchPantry();
+        }
+    } catch (err) {
+        console.error('Error deleting item:', err);
+    }
 }
 
 async function generateAIRecipe() {
-  showToast('Generating AI recipe from pantry items...', 'success');
-  try {
-    const response = await fetch('/api/recipes/generate', { method: 'POST' });
-    if (response.ok) {
-      loadRecipeData();
-      showToast('New AI recipe generated successfully!');
-    }
-  } catch (err) {
-    showToast('Failed to generate recipe', 'error');
-  }
-}
-
-async function submitBarcode() {
-  const barcode = document.getElementById('barcode-input').value;
-  if (!barcode) {
-    showToast('Please enter or scan a barcode', 'error');
-    return;
-  }
-  try {
-    const response = await fetch('/api/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ barcode })
-    });
-    if (response.ok) {
-      closeModal('scan-modal');
-      loadPantryData();
-      showToast('Item successfully added via barcode!');
-    } else {
-      showToast('Product not found for barcode', 'error');
-    }
-  } catch (err) {
-    showToast('Barcode scanning error', 'error');
-  }
-}
-
-function setupForms() {
-  const addItemForm = document.getElementById('add-item-form');
-  if (addItemForm) {
-    addItemForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const formData = new FormData(addItemForm);
-      const data = Object.fromEntries(formData.entries());
-
-      try {
-        const response = await fetch('/api/pantry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-        if (response.ok) {
-          closeModal('add-item-modal');
-          addItemForm.reset();
-          loadPantryData();
-          showToast('Pantry item added successfully!');
-        } else {
-          showToast('Failed to add item', 'error');
+    try {
+        const spotlight = document.getElementById('spotlight-recipe-content');
+        if (spotlight) {
+            spotlight.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 8px;"></i><p>Chef AI is crafting your recipe...</p></div>`;
         }
-      } catch (err) {
-        showToast('Error adding item', 'error');
-      }
-    });
-  }
+
+        const response = await fetch('/api/recipes/generate', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.success) {
+            fetchRecipes();
+            const recipeRes = await fetch('/api/recipes');
+            const recipes = await recipeRes.json();
+            const latest = recipes[recipes.length - 1];
+            if (spotlight && latest) {
+                spotlight.innerHTML = `
+                    <div style="padding: 15px;">
+                        <h4 style="font-size: 16px; margin-bottom: 6px; color: var(--text-main);">${latest.title}</h4>
+                        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">${latest.time} • ${latest.difficulty}</p>
+                        <div style="font-size: 13px; white-space: pre-line; max-height: 150px; overflow-y: auto; background: var(--bg-body); padding: 10px; border-radius: 6px;">${latest.description}</div>
+                    </div>
+                `;
+            }
+        }
+    } catch (err) {
+        console.error('Error generating recipe:', err);
+    }
 }
 
-async function deletePantryItem(itemId) {
-  try {
-    const response = await fetch(`/api/pantry/${itemId}`, { method: 'DELETE' });
-    if (response.ok) {
-      loadPantryData();
-      showToast('Item removed from pantry');
-    }
-  } catch (err) {
-    showToast('Failed to delete item', 'error');
-  }
+// Modal helpers
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'flex';
 }
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'none';
+}
+
+// Sidebar navigation switching
+document.querySelectorAll('.sidebar-menu a').forEach(link => {
+    link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetId = link.getAttribute('data-target');
+        if (!targetId) return;
+
+        document.querySelectorAll('.sidebar-menu li').forEach(li => li.classList.remove('active'));
+        link.parentElement.classList.add('active');
+
+        document.querySelectorAll('.content-view').forEach(view => view.classList.remove('active'));
+        const targetView = document.getElementById(targetId);
+        if (targetView) targetView.classList.add('active');
+    });
+});
