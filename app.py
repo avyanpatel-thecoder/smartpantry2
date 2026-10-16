@@ -1,13 +1,12 @@
 import os
-import requests
-from flask import Flask, render_template, redirect, url_for, request, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from groq import Groq
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'smart-pantry-secret-key-2026')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-dev-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///pantry.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -20,41 +19,35 @@ login_manager.login_view = 'login'
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(150), nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    items = db.relationship('PantryItem', backref='owner', lazy=True)
+    recipes = db.relationship('Recipe', backref='owner', lazy=True)
 
 class PantryItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    quantity = db.Column(db.String(50), nullable=False)
     category = db.Column(db.String(50), nullable=True)
-    expiry_date = db.Column(db.String(50), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
 class Recipe(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(150), nullable=False)
-    description = db.Column(db.Text, nullable=True)
+    title = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text, nullable=False)
     time = db.Column(db.String(50), nullable=True)
     difficulty = db.Column(db.String(50), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-
-with app.app_context():
-    db.create_all()
-    if not User.query.filter_by(username='demo@smartpantry.com').first():
-        hashed_pw = generate_password_hash('password123', method='pbkdf2:sha256')
-        demo_user = User(username='demo@smartpantry.com', password=hashed_pw)
-        db.session.add(demo_user)
-        db.session.commit()
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# --- Application & Auth Routes ---
+# --- Routes ---
 @app.route('/')
 @login_required
 def index():
-    return render_template('index.html')
+    items = PantryItem.query.filter_by(user_id=current_user.id).all()
+    recipes = Recipe.query.filter_by(user_id=current_user.id).all()
+    return render_template('index.html', items=items, recipes=recipes)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -62,34 +55,27 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         user = User.query.filter_by(username=username).first()
-        
         if user and check_password_hash(user.password, password):
             login_user(user)
             return redirect(url_for('index'))
-        flash('Invalid username or password', 'error')
-    return render_template('auth.html')
+        flash('Invalid username or password.')
+    return render_template('login.html')
 
-@app.route('/register', methods=['POST'])
+@app.route('/register', methods=['GET', 'POST'])
 def register():
-    username = request.form.get('username')
-    password = request.form.get('password')
-    
-    if not username or not password:
-        flash('Username and password are required', 'error')
-        return redirect(url_for('login'))
-        
-    existing_user = User.query.filter_by(username=username).first()
-    if existing_user:
-        flash('Username already exists. Please login.', 'error')
-        return redirect(url_for('login'))
-        
-    hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
-    new_user = User(username=username, password=hashed_pw)
-    db.session.add(new_user)
-    db.session.commit()
-    
-    login_user(new_user)
-    return redirect(url_for('index'))
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists.')
+            return redirect(url_for('register'))
+        hashed_password = generate_password_hash(password, method='scrypt')
+        new_user = User(username=username, password=hashed_password)
+        db.session.add(new_user)
+        db.session.commit()
+        login_user(new_user)
+        return redirect(url_for('index'))
+    return render_template('register.html')
 
 @app.route('/logout')
 @login_required
@@ -97,55 +83,27 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-# --- Pantry APIs ---
-@app.route('/api/pantry', methods=['GET'])
+@app.route('/add_item', methods=['POST'])
 @login_required
-def get_pantry():
-    items = PantryItem.query.filter_by(user_id=current_user.id).all()
-    return jsonify([{
-        'id': item.id,
-        'name': item.name,
-        'quantity': item.quantity,
-        'category': item.category,
-        'expiry_date': item.expiry_date
-    } for item in items])
+def add_item():
+    name = request.form.get('name')
+    category = request.form.get('category', 'General')
+    if name:
+        item = PantryItem(name=name, category=category, user_id=current_user.id)
+        db.session.add(item)
+        db.session.commit()
+    return redirect(url_for('index'))
 
-@app.route('/api/pantry', methods=['POST'])
+@app.route('/delete_item/<int:item_id>', methods=['POST'])
 @login_required
-def add_pantry():
-    data = request.get_json()
-    new_item = PantryItem(
-        name=data.get('name'),
-        quantity=data.get('quantity'),
-        category=data.get('category', 'Pantry'),
-        expiry_date=data.get('expiry_date'),
-        user_id=current_user.id
-    )
-    db.session.add(new_item)
-    db.session.commit()
-    return jsonify({'success': True, 'id': new_item.id}), 201
+def delete_item(item_id):
+    item = PantryItem.query.get_or_404(item_id)
+    if item.user_id == current_user.id:
+        db.session.delete(item)
+        db.session.commit()
+    return redirect(url_for('index'))
 
-@app.route('/api/pantry/<int:item_id>', methods=['DELETE'])
-@login_required
-def delete_pantry(item_id):
-    item = PantryItem.query.filter_by(id=item_id, user_id=current_user.id).first_or_404()
-    db.session.delete(item)
-    db.session.commit()
-    return jsonify({'success': True})
-
-# --- Recipe APIs ---
-@app.route('/api/recipes', methods=['GET'])
-@login_required
-def get_recipes():
-    recipes = Recipe.query.filter_by(user_id=current_user.id).all()
-    return jsonify([{
-        'id': r.id,
-        'title': r.title,
-        'description': r.description,
-        'time': r.time,
-        'difficulty': r.difficulty
-    } for r in recipes])
-
+# --- AI Recipe Generation Route ---
 @app.route('/api/recipes/generate', methods=['POST'])
 @login_required
 def generate_recipe():
@@ -164,18 +122,17 @@ Available Pantry Inventory: {', '.join(item_names)}.
 
 CRITICAL CHEF GUIDELINES:
 1. Analyze the inventory intelligently. Separate raw ingredients or cooking supplies from ready-to-eat snacks, packaged treats, or granola bars. 
-2. Do NOT force bizarre or disgusting combinations (e.g., do not put chocolate granola bars into a savory stir-fry or soup). If snack items are present, use them appropriately in breakfast bowls, yogurt parfaits, dessert crumbles, or snack boards, or focus the meal on the actual savory/cooking staples available.
-3. Invent a completely unique, creative, and coherent recipe suited for these specific items. Avoid repetitive titles or generic formats.
+2. Do NOT force bizarre or disgusting combinations. If snack items are present, use them appropriately in breakfast bowls, yogurt parfaits, dessert crumbles, or snack boards.
+3. Invent a completely unique, creative, and coherent recipe suited for these specific items.
 4. Output your response in this exact plain-text structure:
 [Recipe Title]
 Prep Time: [e.g., 15 mins] | Difficulty: [Easy/Medium/Hard]
 
 Step-by-Step Instructions:
 1. [First step]
-2. [Second step]
-(continue as needed)"""
+2. [Second step]"""
         
-completion = client.chat.completions.create(
+        completion = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.95,
@@ -204,51 +161,9 @@ completion = client.chat.completions.create(
         print(f"Groq API error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# --- Barcode Scanner API ---
-@app.route('/api/scan', methods=['POST'])
-@login_required
-def scan_barcode():
-    data = request.get_json()
-    barcode = data.get('barcode')
-    
-    if not barcode:
-        return jsonify({'error': 'Barcode is required'}), 400
-        
-    headers = {'User-Agent': 'SmartPantryApp - Version 1.0'}
-    off_url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
-    
-    try:
-        response = requests.get(off_url, headers=headers)
-        product_name = f"Scanned Item ({barcode})"
-        category = "Pantry"
-        
-        if response.status_code == 200:
-            prod_data = response.json()
-            if prod_data.get('status') == 1:
-                product = prod_data.get('product', {})
-                product_name = product.get('product_name') or product.get('generic_name') or product_name
-                categories_list = product.get('categories_tags', [])
-                if categories_list:
-                    category = categories_list[0].replace('en:', '').capitalize()
-                    
-        new_item = PantryItem(
-            name=product_name,
-            quantity="1 unit",
-            category=category,
-            expiry_date="2026-12-31",
-            user_id=current_user.id
-        )
-        db.session.add(new_item)
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': f"Added {product_name} via barcode!",
-            'item': {'name': product_name, 'category': category}
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
+# --- Database Initialization & Run ---
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    with app.app_context():
+        db.create_all()
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
