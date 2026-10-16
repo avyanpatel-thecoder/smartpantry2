@@ -1,4 +1,5 @@
 import os
+import random
 import requests
 from flask import Flask, render_template, redirect, url_for, request, jsonify, flash
 from flask_sqlalchemy import SQLAlchemy
@@ -38,7 +39,6 @@ class Recipe(db.Model):
     difficulty = db.Column(db.String(50), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
-# Initialize tables globally for cloud / Gunicorn boot
 with app.app_context():
     db.create_all()
     if not User.query.filter_by(username='demo@smartpantry.com').first():
@@ -158,17 +158,21 @@ def generate_recipe():
     if groq_api_key:
         try:
             client = Groq(api_key=groq_api_key)
-            prompt = f"Create a short, creative cooking recipe using some of these pantry ingredients: {', '.join(item_names)}. Return the output with a clear title, prep time, difficulty level, and short description."
+            prompt = f"""You are an expert chef. Create a unique, creative recipe using some of these pantry ingredients: {', '.join(item_names)}.
+Provide:
+1. A creative recipe title (vary the style—use bowls, soups, curries, wraps, or bakes, not just skillets).
+2. Estimated prep time and difficulty level.
+3. Clear, numbered step-by-step cooking instructions."""
             
             completion = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-                max_tokens=300
+                temperature=0.8,
+                max_tokens=400
             )
             recipe_text = completion.choices[0].message.content
             lines = [line.strip() for line in recipe_text.split('\n') if line.strip()]
-            recipe_title = lines[0] if lines else "AI Chef Special"
+            recipe_title = lines[0].replace('Title:', '').strip() if lines else "AI Chef Special"
             
             new_recipe = Recipe(
                 title=recipe_title[:100],
@@ -183,12 +187,25 @@ def generate_recipe():
         except Exception as e:
             print(f"Groq API error: {e}")
 
-    # Fallback recipe if key is missing or call fails
-    recipe_title = f"Fresh {item_names[0]} Skillet"
+    # Varied fallback recipe if key is missing or call fails
+    styles = ["Nourish Bowl", "Homestyle Soup", "Garden Wrap", "Quick Stir-Fry", "Warm Bake"]
+    chosen_style = random.choice(styles)
+    recipe_title = f"{item_names[0]} {chosen_style}"
+    
+    fallback_instructions = f"""{recipe_title}
+Prep Time: 20 mins | Difficulty: Easy
+
+Step-by-Step Instructions:
+1. Prepare and wash your ingredients: {', '.join(item_names[:3])}.
+2. Heat a pan or pot with a little oil or water over medium heat.
+3. Combine the ingredients and season with salt, pepper, or your favorite spices to taste.
+4. Cook for 12-15 minutes, stirring occasionally until tender and hot.
+5. Serve warm and enjoy your meal!"""
+
     new_recipe = Recipe(
         title=recipe_title,
-        description=f"A delicious meal whipped up using available ingredients: {', '.join(item_names[:3])}.",
-        time="25 mins",
+        description=fallback_instructions,
+        time="20 mins",
         difficulty="Easy",
         user_id=current_user.id
     )
