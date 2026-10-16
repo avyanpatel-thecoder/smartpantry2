@@ -118,8 +118,8 @@ async function deleteItem(id) {
 }
 
 async function generateAIRecipe() {
+    const spotlight = document.getElementById('spotlight-recipe-content');
     try {
-        const spotlight = document.getElementById('spotlight-recipe-content');
         if (spotlight) {
             spotlight.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 8px;"></i><p>Chef AI is crafting your recipe...</p></div>`;
         }
@@ -128,7 +128,7 @@ async function generateAIRecipe() {
         const data = await response.json();
 
         if (data.success) {
-            fetchRecipes();
+            await fetchRecipes();
             const recipeRes = await fetch('/api/recipes');
             const recipes = await recipeRes.json();
             const latest = recipes[recipes.length - 1];
@@ -141,9 +141,14 @@ async function generateAIRecipe() {
                     </div>
                 `;
             }
+        } else {
+            throw new Error(data.error || 'Failed to generate recipe');
         }
     } catch (err) {
         console.error('Error generating recipe:', err);
+        if (spotlight) {
+            spotlight.innerHTML = `<div style="padding: 20px; color: #EF4444; font-size: 13px;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${err.message}</div>`;
+        }
     }
 }
 
