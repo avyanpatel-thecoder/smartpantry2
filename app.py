@@ -1,5 +1,4 @@
 import os
-import random
 import requests
 from flask import Flask, render_template, redirect, url_for, request, jsonify, flash
 from flask_sqlalchemy import SQLAlchemy
@@ -151,67 +150,60 @@ def get_recipes():
 @login_required
 def generate_recipe():
     items = PantryItem.query.filter_by(user_id=current_user.id).all()
-    item_names = [i.name for i in items] if items else ["Pantry Staples"]
+    item_names = [i.name for i in items] if items else ["Assorted Pantry Ingredients"]
     
     groq_api_key = os.environ.get("GROQ_API_KEY")
-    
-    if groq_api_key:
-        try:
-            client = Groq(api_key=groq_api_key)
-            prompt = f"""You are an expert chef. Create a unique, creative recipe using some of these pantry ingredients: {', '.join(item_names)}.
-Provide:
-1. A creative recipe title (vary the style—use bowls, soups, curries, wraps, or bakes, not just skillets).
-2. Estimated prep time and difficulty level.
-3. Clear, numbered step-by-step cooking instructions."""
-            
-            completion = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.8,
-                max_tokens=400
-            )
-            recipe_text = completion.choices[0].message.content
-            lines = [line.strip() for line in recipe_text.split('\n') if line.strip()]
-            recipe_title = lines[0].replace('Title:', '').strip() if lines else "AI Chef Special"
-            
-            new_recipe = Recipe(
-                title=recipe_title[:100],
-                description=recipe_text,
-                time="20 mins",
-                difficulty="Easy",
-                user_id=current_user.id
-            )
-            db.session.add(new_recipe)
-            db.session.commit()
-            return jsonify({'success': True, 'title': recipe_title})
-        except Exception as e:
-            print(f"Groq API error: {e}")
+    if not groq_api_key:
+        return jsonify({'success': False, 'error': 'GROQ_API_KEY is not configured on the server.'}), 500
 
-    # Varied fallback recipe if key is missing or call fails
-    styles = ["Nourish Bowl", "Homestyle Soup", "Garden Wrap", "Quick Stir-Fry", "Warm Bake"]
-    chosen_style = random.choice(styles)
-    recipe_title = f"{item_names[0]} {chosen_style}"
-    
-    fallback_instructions = f"""{recipe_title}
-Prep Time: 20 mins | Difficulty: Easy
+    try:
+        client = Groq(api_key=groq_api_key)
+        
+        # Pure AI prompt with culinary logic to prevent absurd combos (e.g. granola bars in stir-fries)
+        prompt = f"""You are an elite, Michelin-star executive chef and culinary innovator. 
+Available Pantry Inventory: {', '.join(item_names)}.
+
+CRITICAL CHEF GUIDELINES:
+1. Analyze the inventory intelligently. Separate raw ingredients or cooking supplies from ready-to-eat snacks, packaged treats, or granola bars. 
+2. Do NOT force bizarre or disgusting combinations (e.g., do not put chocolate granola bars into a savory stir-fry or soup). If snack items are present, use them appropriately in breakfast bowls, yogurt parfaits, dessert crumbles, or snack boards, or focus the meal on the actual savory/cooking staples available.
+3. Invent a completely unique, creative, and coherent recipe suited for these specific items. Avoid repetitive titles or generic formats.
+4. Output your response in this exact plain-text structure:
+[Recipe Title]
+Prep Time: [e.g., 15 mins] | Difficulty: [Easy/Medium/Hard]
 
 Step-by-Step Instructions:
-1. Prepare and wash your ingredients: {', '.join(item_names[:3])}.
-2. Heat a pan or pot with a little oil or water over medium heat.
-3. Combine the ingredients and season with salt, pepper, or your favorite spices to taste.
-4. Cook for 12-15 minutes, stirring occasionally until tender and hot.
-5. Serve warm and enjoy your meal!"""
+1. [First step]
+2. [Second step]
+(continue as needed)"""
+        
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.95,  # High temperature for maximum creativity and diverse outputs
+            max_tokens=600
+        )
+        
+        recipe_text = completion.choices[0].message.content.strip()
+        lines = [line.strip() for line in recipe_text.split('\n') if line.strip()]
+        
+        recipe_title = lines[0].replace('[', '').replace(']', '').replace('Recipe Title:', '').strip() if lines else "Chef's Autonomous Creation"
+        if recipe_title.startswith('Title:'):
+            recipe_title = recipe_title.replace('Title:', '').strip()
 
-    new_recipe = Recipe(
-        title=recipe_title,
-        description=fallback_instructions,
-        time="20 mins",
-        difficulty="Easy",
-        user_id=current_user.id
-    )
-    db.session.add(new_recipe)
-    db.session.commit()
-    return jsonify({'success': True, 'title': recipe_title})
+        new_recipe = Recipe(
+            title=recipe_title[:100],
+            description=recipe_text,
+            time="25 mins",
+            difficulty="Medium",
+            user_id=current_user.id
+        )
+        db.session.add(new_recipe)
+        db.session.commit()
+        return jsonify({'success': True, 'title': recipe_title})
+        
+    except Exception as e:
+        print(f"Groq API error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # --- Barcode Scanner API ---
 @app.route('/api/scan', methods=['POST'])
