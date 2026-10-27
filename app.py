@@ -5,7 +5,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from werkzeug.security import generate_password_hash, check_password_hash
 from groq import Groq
 
-app = Flask(__name__)
+app = Flask(__name__, instance_path="/tmp/instance")
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-dev-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///pantry.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
