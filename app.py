@@ -15,9 +15,6 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-# Create database tables on startup for production
-with app.app_context():
-    db.create_all()
 
 # --- Database Models ---
 class User(UserMixin, db.Model):
@@ -40,6 +37,9 @@ class Recipe(db.Model):
     time = db.Column(db.String(50), nullable=True)
     difficulty = db.Column(db.String(50), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    # Initialize database tables after defining models
+with app.app_context():
+    db.create_all()
 
 @login_manager.user_loader
 def load_user(user_id):
